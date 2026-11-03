@@ -7,11 +7,11 @@ namespace LogFileReader_ConsoleApp
 {
     public class AppProvider
     {
-        private string[] _file;
-        private ILogFileReader _reader;
-        private IWriter _writer;
+        private readonly IEnumerable<string> _file;
+        private readonly ILogFileReader _reader;
+        private readonly IWriter _writer;
 
-        public AppProvider(string[] logFile, ILogFileReader reader, IWriter writer)
+        public AppProvider(IEnumerable<string> logFile, ILogFileReader reader, IWriter writer)
         {
             _file = logFile;
             _writer = writer;

@@ -5,7 +5,7 @@ namespace LogFileReader_ConsoleApp.DB_Context
 {
     public interface IWriter
     {
-        void WriteLogToDb(IEnumerable<Log> file);
+        int WriteLogToDb(IEnumerable<Log> file);
     }
 
     public class CF_Writer : IWriter
@@ -13,18 +13,18 @@ namespace LogFileReader_ConsoleApp.DB_Context
         public CF_Writer()
         { }
 
-        public void WriteLogToDb(IEnumerable<Log> file)
+        public int WriteLogToDb(IEnumerable<Log> file)
         {
             using (var ctx = new CF_Context())
             {
-                ctx.Database.EnsureCreated();
-
                 foreach (var log in file)
                 {
                     ctx.LogFile.Add(log);
                 }
 
-                ctx.SaveChanges();
+                // Finish reading before any database operation, so read failures cannot create a schema.
+                ctx.Database.EnsureCreated();
+                return ctx.SaveChanges();
             }
         }
     }

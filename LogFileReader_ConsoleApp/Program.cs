@@ -1,9 +1,9 @@
 using System;
-using System.IO;
-using System.Linq;
+using System.Collections.Generic;
 using System.Text.Json;
 using LogFileReader_ConsoleApp.Adapters;
 using LogFileReader_ConsoleApp.DB_Context;
+using LogFileReader_ConsoleApp.Models;
 
 namespace LogFileReader_ConsoleApp
 {
@@ -18,13 +18,13 @@ namespace LogFileReader_ConsoleApp
             }
             try
             {
-                var logs = new LogFileReader().ParseLogIntoObject(File.ReadAllLines(args[0])).ToArray();
+                var logs = new LogFileReader().ParseLogFile(args[0]);
                 if (args.Length == 2)
-                    Console.WriteLine(JsonSerializer.Serialize(logs, new JsonSerializerOptions { WriteIndented = true }));
+                    WriteJson(logs);
                 else
                 {
-                    new CF_Writer().WriteLogToDb(logs);
-                    Console.WriteLine($"Imported {logs.Length} log entries.");
+                    var imported = new CF_Writer().WriteLogToDb(logs);
+                    Console.WriteLine($"Imported {imported} log entries.");
                 }
                 return 0;
             }
@@ -33,6 +33,22 @@ namespace LogFileReader_ConsoleApp
                 Console.Error.WriteLine($"Import failed: {ex.Message}");
                 return 1;
             }
+        }
+
+        private static void WriteJson(IEnumerable<Log> logs)
+        {
+            using var output = Console.OpenStandardOutput();
+            using var json = new Utf8JsonWriter(output, new JsonWriterOptions { Indented = true });
+            json.WriteStartArray();
+            foreach (var log in logs)
+            {
+                JsonSerializer.Serialize(json, log);
+                // Bound output buffering without flushing for every small entry.
+                if (json.BytesPending >= 64 * 1024) json.Flush();
+            }
+            json.WriteEndArray();
+            json.Flush();
+            Console.WriteLine();
         }
     }
 }

@@ -1,34 +1,52 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using LogFileReader_ConsoleApp.Models;
 
 namespace LogFileReader_ConsoleApp.Adapters
 {
     public interface ILogFileReader
     {
-        IEnumerable<Log> ParseLogIntoObject(string[] input);
+        IEnumerable<Log> ParseLogFile(string path);
+        IEnumerable<Log> ParseLogIntoObject(IEnumerable<string> input);
     }
 
     public class LogFileReader : ILogFileReader
     {
-        public IEnumerable<Log> ParseLogIntoObject(string[] input)
+        private static readonly string[] HeaderPrefixes = { "info:", "warn:", "fail:", "dbug:", "trce:", "crit:" };
+
+        public IEnumerable<Log> ParseLogFile(string path)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            return ParseLogIntoObject(ReadLines(path));
+        }
+
+        private static IEnumerable<string> ReadLines(string path)
+        {
+            // The iterator owns the reader, including when enumeration stops early.
+            // StreamReader detects UTF BOMs and otherwise reads UTF-8.
+            using var reader = new StreamReader(path);
+            while (reader.ReadLine() is { } line)
+                yield return line;
+        }
+
+        public IEnumerable<Log> ParseLogIntoObject(IEnumerable<string> input)
         {
             ArgumentNullException.ThrowIfNull(input);
-            for (var index = 0; index < input.Length;)
+            using var inputLines = input.GetEnumerator();
+            var hasLine = inputLines.MoveNext();
+            while (hasLine)
             {
-                if (!TryHeader(input[index], out var level, out var source))
+                if (!TryHeader(inputLines.Current, out var level, out var source))
                 {
-                    index++;
+                    hasLine = inputLines.MoveNext();
                     continue;
                 }
-                index++;
                 var lines = new List<string>();
-                while (index < input.Length && !TryHeader(input[index], out _, out _))
-                {
-                    lines.Add(input[index].Trim());
-                    index++;
-                }
-                // Keep incomplete entries visible instead of losing them or reading beyond EOF.
+                while ((hasLine = inputLines.MoveNext()) && !TryHeader(inputLines.Current, out _, out _))
+                    lines.Add(inputLines.Current.Trim());
+
+                // Keep only the current entry and the next header, even at EOF.
                 var log = new Log { LogType = level, Message = lines.Count > 0 ? lines[0] : string.Empty };
                 if (level == "info") log.Middleware = source;
                 else log.FailedClass = source;
@@ -40,7 +58,7 @@ namespace LogFileReader_ConsoleApp.Adapters
 
         private static bool TryHeader(string line, out string level, out string source)
         {
-            foreach (var prefix in new[] { "info:", "warn:", "fail:", "dbug:", "trce:", "crit:" })
+            foreach (var prefix in HeaderPrefixes)
             {
                 if (line.StartsWith(prefix, StringComparison.Ordinal))
                 {
